@@ -216,7 +216,7 @@ def normalize_yaml_scalar(value: str) -> str:
     value = re.sub(r"\s+#.*$", "", value).strip()
 
     if (
-        (value.startswith('"') and value.endswith('""))
+        (value.startswith('"') and value.endswith('"'))
         or (value.startswith("'") and value.endswith("'"))
     ):
         value = value[1:-1]
