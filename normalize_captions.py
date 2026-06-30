@@ -861,6 +861,77 @@ def write_warnings(path: Path, stats: CleanupStats) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def cues_to_markdown(
+    path: Path,
+    cues: list[Cue],
+    source_name: str,
+    title: str | None = None,
+) -> None:
+    title = title or Path(source_name).stem
+
+    paragraphs: list[str] = []
+    buffer: list[str] = []
+    last_end = 0
+
+    for cue in cues:
+        gap = cue.start_ms - last_end
+        text = cue.text.strip()
+
+        if not text:
+            continue
+
+        # Stage directions.
+        if re.fullmatch(r"\[?(applause|laughter|music|inaudible|silence)\]?", text, re.IGNORECASE):
+            if buffer:
+                paragraphs.append(" ".join(buffer).strip())
+                buffer = []
+            paragraphs.append(f"> *{text.strip('[]').capitalize()}.*")
+            last_end = cue.end_ms
+            continue
+
+        # Start a new paragraph after long pauses.
+        if buffer and gap > 1800:
+            paragraphs.append(" ".join(buffer).strip())
+            buffer = []
+
+        buffer.append(text)
+        last_end = cue.end_ms
+
+    if buffer:
+        paragraphs.append(" ".join(buffer).strip())
+
+    # Light paragraph cleanup.
+    cleaned: list[str] = []
+    for para in paragraphs:
+        para = re.sub(r"\s+", " ", para).strip()
+        para = re.sub(r"([.!?])\s+", r"\1 ", para)
+        if para:
+            cleaned.append(para)
+
+    lines = [
+        "---",
+        f"title: {json.dumps(title)}",
+        f"source: {json.dumps(source_name)}",
+        "generated_by: normalize_captions.py",
+        "format: simplified transcript",
+        "---",
+        "",
+        f"# {title}",
+        "",
+        "> This is a simplified Markdown transcript generated from cleaned captions.",
+        "> Timestamps were removed. Speaker attribution is not inferred unless added in a later review pass.",
+        "",
+        "## Transcript",
+        "",
+    ]
+
+    for para in cleaned:
+        lines.append(para)
+        lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Normalize Whisper.cpp TXT/VTT captions into cleaner WebVTT."
@@ -943,6 +1014,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path = args.out_dir / f"{input_path.stem}{args.suffix}"
         notes_path = args.out_dir / f"{input_path.stem}.notes.txt"
         warnings_path = args.out_dir / f"{input_path.stem}.warnings.txt"
+        markdown_path = args.out_dir / f"{input_path.stem}.transcript.md"
 
         if args.dry_run:
             print(f"Dry run: {input_path}")
@@ -964,10 +1036,12 @@ def main(argv: list[str] | None = None) -> int:
             stats,
         )
         write_warnings(warnings_path, stats)
+        cues_to_markdown(markdown_path, normalized, input_path.name)
 
         print(f"Wrote {output_path}")
         print(f"Wrote {notes_path}")
         print(f"Wrote {warnings_path}")
+        print(f"Wrote {markdown_path}")
 
     return exit_code
 
