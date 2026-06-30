@@ -219,7 +219,7 @@ def normalize_yaml_scalar(value: str) -> str:
         (value.startswith('"') and value.endswith('"'))
         or (value.startswith("'") and value.endswith("'"))
     ):
-    value = value[1:-1]
+        value = value[1:-1]
 
     return value.strip()
 
